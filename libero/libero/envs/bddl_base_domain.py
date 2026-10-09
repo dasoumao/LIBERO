@@ -19,6 +19,7 @@ from libero.libero.envs.object_states import *
 from libero.libero.envs.objects import *
 from libero.libero.envs.regions import *
 from libero.libero.envs.arenas import *
+from libero.libero.envs.chunk_step import ChunkStepMixin
 
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -34,7 +35,7 @@ def register_problem(target_class):
 import time
 
 
-class BDDLBaseDomain(SingleArmEnv):
+class BDDLBaseDomain(ChunkStepMixin, SingleArmEnv):
     """
     A base domain for parsing bddl files.
     """

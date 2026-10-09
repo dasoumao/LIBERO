@@ -44,6 +44,78 @@ ______________________________________________________________________
 - [Citation](#Citation)
 - [License](#License)
 
+## Chunked simulation
+
+`OffScreenRenderEnv.step_chunk` accepts an entire action chunk. It keeps the
+original physics substeps, OSC controller updates, rewards, object-state updates,
+and success checks for every action. The default path skips unused intermediate
+camera renders / pixel readbacks and observation dictionary construction.
+Ordinary `env.step(action)` is unchanged.
+
+```python
+obs, reward_sum, done, info = env.step_chunk(actions)  # actions: [K, 7]
+if not done:
+    actions = policy(obs)
+```
+
+The return value is `(last_obs, reward_sum, done, info)`:
+
+- `done` is true if any action succeeded or the environment horizon was reached.
+- `info["steps_executed"]` is the number of actions actually executed.
+- `info["rewards"]`, `info["successes"]`, and `info["step_infos"]` preserve the
+  per-action results. Reward is summed; success is latched across the chunk.
+- The default `stop_on_success=True` stops on the first successful action. If
+  that action precedes the planned final action, `last_obs` is **None** and
+  `info["observation_available"]` is false. No stale terminal image is returned.
+  Use `render_intermediate=True` if you need the exact early-terminal observation.
+- `stop_on_success=False` executes the full chunk unless the environment horizon
+  is reached. `info["horizon_reached"]` distinguishes that limit from success.
+- `info["camera_sampling_deferred"]` reports whether camera suppression was
+  enabled for the chunk; this does not imply that any intermediate action ran.
+
+Camera suppression targets the standard robosuite **1.4.0** observation graph,
+with stateless cameras sampled at the control frequency. It advances the original
+Observable sampling clocks using cached pixel values internally, restores the
+real camera sensors for the last action, and adds no forced boundary render.
+Intermediate pixel-array copies still occur; this first implementation removes
+rendering/readback rather than replacing robosuite's sampler. It uses private
+Observable fields from the pinned version and needs revalidation on upgrades.
+
+Custom camera sensors, nonstandard camera sampling rates, custom observation
+filters/noise/delays, and custom state-sensor modules cause the whole camera group
+to fall back to normal sampling. This protects shared RGB/depth/segmentation
+caches. Intermediate observation dictionaries are still omitted on that path.
+Use `render_intermediate=True` to retain all sampling and observation construction,
+including for custom sensors that depend on camera caches. No global robosuite
+functions or installed dependency files are patched.
+
+This API is currently provided on individual environments. It does not add a
+chunk RPC to `SubprocVectorEnv`, change model inference scheduling, change physics
+timesteps, or merge OSC updates into constant-torque MuJoCo steps.
+
+### Validation on a simulation machine
+
+The following checks require a configured LIBERO installation and a working
+rendering backend. They were **not run on the development machine**; only static
+source checks were performed. No speedup or trajectory-equivalence measurement
+is claimed yet.
+
+```bash
+python -m pytest tests/test_chunk_step.py
+MUJOCO_GL=egl python benchmark_scripts/benchmark_chunk_step.py \
+  --bddl-file /path/to/task.bddl \
+  --init-state-file /path/to/task.pruned_init \
+  --chunk-size 32 --output chunk-benchmark.json
+```
+
+The benchmark replays the same seeded actions without a policy. It checks
+simulator state and observations at each chunk boundary, per-action rewards and
+success flags, then reports wall-clock timings. Use `--depth` and
+`--segmentation element` to check additional camera outputs. Unit tests cover
+sampling phases across repeated chunks, early success, horizon truncation,
+custom-observable fallbacks, and exception recovery. These checks do not replace
+full-policy success-rate validation before using the optimized path in a report.
+
 
 # Installtion
 Please run the following commands in the given order to install the dependency for **LIBERO**.

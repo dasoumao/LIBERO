@@ -87,6 +87,18 @@ class ControlEnv:
     def step(self, action):
         return self.env.step(action)
 
+    def step_chunk(self, actions, *, stop_on_success=True, render_intermediate=False):
+        """Execute actions with only the final observation materialized.
+
+        An early successful stop may return obs=None. See
+        ChunkStepMixin.step_chunk for the return contract and compatibility mode.
+        """
+        return self.env.step_chunk(
+            actions,
+            stop_on_success=stop_on_success,
+            render_intermediate=render_intermediate,
+        )
+
     def reset(self):
         success = False
         while not success:
